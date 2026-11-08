@@ -14,24 +14,27 @@ export default function Home() {
 
         {/* 직함 / 태그 */}
         <p className="mt-1 text-sm font-medium text-blue-600 dark:text-blue-400">
-          Student & Developer
+          Frontend & Software Developer
         </p>
 
         {/* 소개글 */}
         <p className="mt-4 text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-          안녕하세요! 바이브 코딩을 배우고 있는 대학생입니다.
+          기술을 통해 일상의 문제를 해결하고 가치 있는 사용자 경험을 만드는 개발자입니다. 새로운 기술을 탐구하고 코드로 구현해 나가는 과정을 즐깁니다.
         </p>
 
         {/* 심플한 구분선 및 태그 */}
         <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap justify-center gap-2">
           <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-            #바이브코딩
+            #WebDeveloper
           </span>
           <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-            #대학생
+            #Frontend
           </span>
           <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
             #Nextjs
+          </span>
+          <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            #CleanCode
           </span>
         </div>
       </div>
