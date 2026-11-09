@@ -13,8 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "마이링크 (MyLink)",
-  description: "마이링크 서비스",
+  title: "김태경 (Taekyung Kim) | MyLink",
+  description: "Frontend & Software Developer 김태경의 프로필, 프로젝트 및 주요 링크 허브",
+  keywords: ["김태경", "개발자", "프론트엔드", "포트폴리오", "MyLink", "Next.js"],
+  authors: [{ name: "김태경" }],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
