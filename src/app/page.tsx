@@ -9,12 +9,17 @@ import {
   Check,
   Heart,
   Share2,
-  ChevronRight,
   BookOpen,
   FolderGit2,
   ExternalLink,
   Copy,
+  Camera,
+  Music2,
+  Play,
+  AtSign,
 } from "lucide-react";
+import { ProfileLinkList, type LinkBlock, type MainLink } from "@/components/profile/profile-link-list";
+import mockLinks from "@/data/mock-links.json";
 
 type TabType = "links" | "projects" | "skills" | "about";
 
@@ -38,60 +43,137 @@ function LinkedinIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-interface MainLink {
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  icon: typeof Globe;
-  badge?: string;
-  isExternal?: boolean;
+const SOCIAL_PLATFORMS = {
+  github: { label: "GitHub", icon: GithubIcon, color: "" },
+  linkedin: { label: "LinkedIn", icon: LinkedinIcon, color: "text-tds-blue-500" },
+  blog: { label: "블로그", icon: BookOpen, color: "text-tds-green-500" },
+  instagram: { label: "Instagram", icon: Camera, color: "" },
+  youtube: { label: "YouTube", icon: Play, color: "" },
+  x: { label: "X", icon: AtSign, color: "" },
+  tiktok: { label: "TikTok", icon: Music2, color: "" },
+  email: { label: "이메일 복사", icon: Copy, color: "text-tds-grey-600" },
+};
+
+type SocialPlatform = keyof typeof SOCIAL_PLATFORMS;
+type Social = { id: string; platform: SocialPlatform; url: string };
+type PublicProfile = { displayName: string; bio: string; avatarUrl: string; socials: Social[] };
+
+const DEFAULT_PROFILE: PublicProfile = {
+  displayName: "김태경",
+  bio: "기술을 통해 일상의 불편을 줄이고, 누구에게나 당연하고 편리한 사용자 경험을 설계해요. 가독성과 확장성을 갖춘 단단한 코드를 지향해요.",
+  avatarUrl: "",
+  socials: [
+    { id: "github", platform: "github", url: "https://github.com" },
+    { id: "linkedin", platform: "linkedin", url: "https://linkedin.com" },
+    { id: "blog", platform: "blog", url: "https://velog.io" },
+    { id: "email", platform: "email", url: "contact.taekyung@example.com" },
+  ],
+};
+
+const LINK_ICONS = { Globe, BookOpen, FolderGit2, FileText, Coffee, ExternalLink, Mail };
+const SOCIAL_CHIP_CLASS =
+  "tds-pressable inline-flex h-[34px] items-center gap-1.5 rounded-full bg-tds-grey-100 px-3.5 text-[13px] font-medium text-tds-grey-800 hover:bg-tds-grey-200";
+
+function readStorage(key: string): unknown {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? null : JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
-const MAIN_LINKS: MainLink[] = [
-  {
-    id: "portfolio",
-    title: "개인 포트폴리오",
-    subtitle: "진행한 프로젝트와 인터랙티브 데모를 모아두었어요",
-    href: "https://example.com/portfolio",
-    icon: Globe,
-    badge: "추천",
-    isExternal: true,
-  },
-  {
-    id: "blog",
-    title: "기술 블로그",
-    subtitle: "프론트엔드 개발 과정과 기술적인 고민을 기록해요",
-    href: "https://velog.io",
-    icon: BookOpen,
-    badge: "최신글",
-    isExternal: true,
-  },
-  {
-    id: "github",
-    title: "깃허브 저장소",
-    subtitle: "오픈소스 기여 및 사이드 프로젝트 코드를 확인해 보세요",
-    href: "https://github.com",
-    icon: FolderGit2,
-    isExternal: true,
-  },
-  {
-    id: "resume",
-    title: "이력서 열람하기",
-    subtitle: "경력 사항과 상세 프로젝트 성과를 정리해 두었어요",
-    href: "#",
-    icon: FileText,
-  },
-  {
-    id: "coffee",
-    title: "1:1 커피챗 신청하기",
-    subtitle: "커리어 고민이나 가벼운 기술 이야기 모두 환영해요",
-    href: "https://calendly.com",
-    icon: Coffee,
-    badge: "열려있음",
-    isExternal: true,
-  },
-];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function webUrl(value: unknown, base?: string): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  try {
+    const url = new URL(value.trim(), base);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function isSocialPlatform(value: unknown): value is SocialPlatform {
+  return typeof value === "string" && Object.hasOwn(SOCIAL_PLATFORMS, value);
+}
+
+function readProfile(): PublicProfile {
+  const data = readStorage("mylink_profile_data");
+  if (!isRecord(data) || typeof data.displayName !== "string" || !data.displayName.trim() ||
+      typeof data.bio !== "string" || !Array.isArray(data.socials)) {
+    return DEFAULT_PROFILE;
+  }
+
+  const socials = data.socials.flatMap((item: unknown): Social[] => {
+    if (!isRecord(item) || typeof item.id !== "string" ||
+        !isSocialPlatform(item.platform) || item.enabled !== true) return [];
+
+    let url = webUrl(item.url);
+    if (item.platform === "email" && typeof item.url === "string") {
+      const email = item.url.trim().replace(/^mailto:/i, "").split("?")[0];
+      url = /^[^\s@]+@[^\s@]+$/.test(email) ? email : "";
+    }
+    return url ? [{ id: item.id, platform: item.platform, url }] : [];
+  });
+
+  return {
+    displayName: data.displayName.trim(),
+    bio: data.bio,
+    avatarUrl: data.avatarUrl ? webUrl(data.avatarUrl, window.location.origin) : "",
+    socials,
+  };
+}
+
+function parseLinks(data: unknown[]): LinkBlock[] | null {
+  const blocks = data.flatMap((item: unknown): { order: number; enabled: boolean; block: LinkBlock }[] => {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.title !== "string" ||
+        !item.title.trim() || typeof item.enabled !== "boolean" ||
+        typeof item.order !== "number" || !Number.isFinite(item.order)) return [];
+
+    const { id, title, order, enabled, type, iconName, url, subtitle, badge } = item;
+    if (type === "header") return [{ order, enabled, block: { id, title, type } }];
+    const isExternal = item.isExternal !== false;
+    const href = !isExternal && typeof url === "string" && url.startsWith("#") ? url : webUrl(url);
+    if (type !== "link" || (enabled && !href)) return [];
+
+    const icon = typeof iconName === "string" && Object.hasOwn(LINK_ICONS, iconName)
+      ? LINK_ICONS[iconName as keyof typeof LINK_ICONS]
+      : Globe;
+    const emoji = typeof iconName === "string" && /\p{Extended_Pictographic}/u.test(iconName)
+      ? iconName
+      : undefined;
+    return [{
+      order,
+      enabled,
+      block: {
+        id,
+        title,
+        href,
+        icon,
+        emoji,
+        isExternal,
+        subtitle: typeof subtitle === "string" ? subtitle : undefined,
+        badge: typeof badge === "string" ? badge : undefined,
+      },
+    }];
+  });
+
+  if (data.length > 0 && blocks.length === 0) return null;
+  return blocks.filter(({ enabled }) => enabled)
+    .sort((a, b) => a.order - b.order)
+    .map(({ block }) => block);
+}
+
+const DEFAULT_LINKS = parseLinks(mockLinks) ?? [];
+
+function readLinks(): LinkBlock[] {
+  const saved = readStorage("mylink_links_data");
+  return Array.isArray(saved) ? parseLinks(saved) ?? DEFAULT_LINKS : DEFAULT_LINKS;
+}
 
 const PROJECTS = [
   {
@@ -146,17 +228,22 @@ export default function Home() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [cheerCount, setCheerCount] = useState<number>(142);
   const [hasCheered, setHasCheered] = useState<boolean>(false);
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const [links, setLinks] = useState<LinkBlock[]>(DEFAULT_LINKS);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const contactEmail = profile.socials.find(({ platform }) => platform === "email")?.url;
+  const coffeeLink = links.find((item): item is MainLink => "href" in item && item.id === "coffee");
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      const saved = localStorage.getItem("tds_cheer_count");
-      if (saved) {
-        setCheerCount(parseInt(saved, 10));
+      setProfile(readProfile());
+      setLinks(readLinks());
+
+      const savedCount = readStorage("tds_cheer_count");
+      if (typeof savedCount === "number" && Number.isInteger(savedCount)) {
+        setCheerCount(savedCount);
       }
-      const cheered = localStorage.getItem("tds_has_cheered");
-      if (cheered) {
-        setHasCheered(cheered === "true");
-      }
+      setHasCheered(readStorage("tds_has_cheered") === true);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -175,8 +262,8 @@ export default function Home() {
     }
   };
 
-  const handleCopyEmail = () => {
-    navigator.clipboard.writeText("contact.taekyung@example.com");
+  const handleCopyEmail = (email: string) => {
+    navigator.clipboard.writeText(email);
     showToast("이메일 주소를 복사했어요");
   };
 
@@ -184,18 +271,22 @@ export default function Home() {
     const newCount = cheerCount + (hasCheered ? -1 : 1);
     setCheerCount(newCount);
     setHasCheered(!hasCheered);
-    localStorage.setItem("tds_cheer_count", newCount.toString());
-    localStorage.setItem("tds_has_cheered", (!hasCheered).toString());
+    try {
+      localStorage.setItem("tds_cheer_count", newCount.toString());
+      localStorage.setItem("tds_has_cheered", (!hasCheered).toString());
+    } catch {
+      // 저장소를 사용할 수 없어도 현재 화면에는 응원을 반영해요.
+    }
     if (!hasCheered) {
       showToast("응원해 주셔서 감사해요!");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F2F4F6] text-[#191F28] font-sans pb-28">
+    <div className="min-h-screen bg-tds-grey-100 text-tds-grey-900 font-sans pb-28">
       {/* 1. TDS 상단 앱 바 (TopAppBar) */}
-      <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between bg-[#F2F4F6]/90 px-5 backdrop-blur-md">
-        <span className="text-[17px] font-bold text-[#191F28] tracking-tight">
+      <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between bg-tds-grey-100/90 px-5 backdrop-blur-md">
+        <span className="text-[17px] font-bold text-tds-grey-900 tracking-tight">
           마이링크
         </span>
 
@@ -204,14 +295,14 @@ export default function Home() {
           <button
             onClick={handleCheer}
             aria-label="응원하기"
-            className={`tds-pressable flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold transition-colors ${
+            className={`tds-pressable flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold ${
               hasCheered
-                ? "bg-[#E8F3FF] text-[#3182F6]"
-                : "bg-white text-[#4E5968] hover:bg-[#F9FAFB]"
+                ? "bg-tds-blue-50 text-tds-blue-500"
+                : "bg-white text-tds-grey-700 hover:bg-tds-grey-50"
             }`}
           >
             <Heart
-              className={`h-4 w-4 ${hasCheered ? "fill-[#3182F6] text-[#3182F6]" : "text-[#8B95A1]"}`}
+              className={`h-4 w-4 ${hasCheered ? "fill-tds-blue-500 text-tds-blue-500" : "text-tds-grey-500"}`}
             />
             <span className="tabular-nums">{cheerCount}</span>
           </button>
@@ -220,7 +311,7 @@ export default function Home() {
           <button
             onClick={handleCopyLink}
             aria-label="링크 복사하기"
-            className="tds-pressable flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#4E5968] hover:bg-[#F9FAFB]"
+            className="tds-pressable flex h-9 w-9 items-center justify-center rounded-full bg-white text-tds-grey-700 hover:bg-tds-grey-50"
           >
             <Share2 className="h-4 w-4" />
           </button>
@@ -229,8 +320,8 @@ export default function Home() {
 
       {/* 2. TDS 토스트 메시지 (TDS Toast) */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2.5 rounded-[14px] bg-[#191F28] px-5 py-3.5 text-[15px] font-medium text-white shadow-[0_8px_24px_rgba(25,31,40,0.16)] transition-all animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#03B26C] text-white">
+        <div className="fixed top-5 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2.5 rounded-[14px] bg-tds-grey-900 px-5 py-3.5 text-[15px] font-medium text-white shadow-[0_8px_24px_rgba(25,31,40,0.16)] transition-all animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-tds-green-500 text-white">
             <Check className="h-3 w-3 stroke-[3]" />
           </div>
           <span>{toastMessage}</span>
@@ -238,113 +329,114 @@ export default function Home() {
       )}
 
       {/* 메인 모바일 셸 컨테이너 */}
-      <main className="mx-auto max-w-lg px-4 pt-3">
+      <main className="mx-auto max-w-lg px-6 pt-3">
         {/* 3. 프로필 히어로 카드 (TDS Card) */}
         <section className="rounded-[24px] bg-white p-6 mb-3 shadow-[0_2px_8px_rgba(25,31,40,0.04)]">
           <div className="flex items-start gap-4">
             {/* 아바타 */}
-            <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#E8F3FF] text-2xl font-bold text-[#3182F6]">
-              김
+            <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-tds-blue-50 text-2xl font-bold text-tds-blue-500">
+              {profile.avatarUrl && !avatarFailed ? (
+                // 브라우저에 저장된 임의의 이미지 URL을 직접 로드해요.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profile.avatarUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                />
+              ) : Array.from(profile.displayName)[0]}
             </div>
 
             {/* 인적사항 */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-[22px] font-bold text-[#191F28] tracking-tight">
-                  김태경
+                <h1 className="text-[22px] font-bold text-tds-grey-900 tracking-tight">
+                  {profile.displayName}
                 </h1>
-                <span className="inline-flex items-center rounded-full bg-[#E8F3FF] px-2.5 py-0.5 text-[11px] font-semibold text-[#3182F6]">
-                  개발자
-                </span>
+                {profile === DEFAULT_PROFILE && (
+                  <span className="inline-flex items-center rounded-full bg-tds-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-tds-blue-500">
+                    개발자
+                  </span>
+                )}
               </div>
-              <p className="mt-0.5 text-[14px] font-medium text-[#4E5968]">
-                Frontend & Software Engineer
-              </p>
+              {profile === DEFAULT_PROFILE && (
+                <p className="mt-0.5 text-[14px] font-medium text-tds-grey-700">
+                  Frontend & Software Engineer
+                </p>
+              )}
             </div>
           </div>
 
           {/* 소개글 (TDS 해요체 원칙) */}
-          <p className="mt-4 text-[15px] leading-relaxed text-[#333D4B]">
-            기술을 통해 일상의 불편을 줄이고, 누구에게나 당연하고 편리한 사용자 경험을 설계해요. 가독성과 확장성을 갖춘 단단한 코드를 지향해요.
-          </p>
+          {profile.bio && (
+            <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-tds-grey-800">
+              {profile.bio}
+            </p>
+          )}
 
           {/* 소셜 링크 칩 (TDS Chips) */}
-          <div className="mt-5 flex flex-wrap gap-2 pt-4 border-t border-[#E5E8EB]">
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tds-pressable inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F4F6] px-3.5 text-[13px] font-medium text-[#333D4B] hover:bg-[#E5E8EB]"
-            >
-              <GithubIcon className="h-4 w-4" />
-              <span>GitHub</span>
-            </a>
-            <a
-              href="https://linkedin.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tds-pressable inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F4F6] px-3.5 text-[13px] font-medium text-[#333D4B] hover:bg-[#E5E8EB]"
-            >
-              <LinkedinIcon className="h-4 w-4 text-[#3182F6]" />
-              <span>LinkedIn</span>
-            </a>
-            <a
-              href="https://velog.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tds-pressable inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F4F6] px-3.5 text-[13px] font-medium text-[#333D4B] hover:bg-[#E5E8EB]"
-            >
-              <BookOpen className="h-4 w-4 text-[#03B26C]" />
-              <span>블로그</span>
-            </a>
-            <button
-              onClick={handleCopyEmail}
-              className="tds-pressable inline-flex h-[34px] items-center gap-1.5 rounded-full bg-[#F2F4F6] px-3.5 text-[13px] font-medium text-[#333D4B] hover:bg-[#E5E8EB]"
-            >
-              <Copy className="h-4 w-4 text-[#6B7684]" />
-              <span>이메일 복사</span>
-            </button>
-          </div>
+          {profile.socials.length > 0 && (
+            <div className="mt-5 flex flex-wrap gap-2 pt-4 border-t border-tds-grey-200">
+              {profile.socials.map(({ id, platform, url }) => {
+                const { icon: Icon, label, color } = SOCIAL_PLATFORMS[platform];
+                const content = (
+                  <>
+                    <Icon className={`h-4 w-4 ${color}`} />
+                    <span>{label}</span>
+                  </>
+                );
+                return platform === "email" ? (
+                  <button key={id} onClick={() => handleCopyEmail(url)} className={SOCIAL_CHIP_CLASS}>
+                    {content}
+                  </button>
+                ) : (
+                  <a key={id} href={url} target="_blank" rel="noopener noreferrer" className={SOCIAL_CHIP_CLASS}>
+                    {content}
+                  </a>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* 4. TDS 세그먼트 컨트롤 (Segmented Control) */}
-        <div className="mb-3 flex rounded-[14px] bg-[#E5E8EB]/70 p-1">
+        <div className="mb-3 flex rounded-[14px] bg-tds-grey-200/70 p-1">
           <button
             onClick={() => setActiveTab("links")}
-            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] transition-all ${
+            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] ${
               activeTab === "links"
-                ? "bg-white font-bold text-[#191F28] shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
-                : "font-medium text-[#6B7684] hover:text-[#191F28]"
+                ? "bg-white font-bold text-tds-grey-900 shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
+                : "font-medium text-tds-grey-600 hover:text-tds-grey-900"
             }`}
           >
             링크
           </button>
           <button
             onClick={() => setActiveTab("projects")}
-            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] transition-all ${
+            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] ${
               activeTab === "projects"
-                ? "bg-white font-bold text-[#191F28] shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
-                : "font-medium text-[#6B7684] hover:text-[#191F28]"
+                ? "bg-white font-bold text-tds-grey-900 shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
+                : "font-medium text-tds-grey-600 hover:text-tds-grey-900"
             }`}
           >
             프로젝트
           </button>
           <button
             onClick={() => setActiveTab("skills")}
-            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] transition-all ${
+            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] ${
               activeTab === "skills"
-                ? "bg-white font-bold text-[#191F28] shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
-                : "font-medium text-[#6B7684] hover:text-[#191F28]"
+                ? "bg-white font-bold text-tds-grey-900 shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
+                : "font-medium text-tds-grey-600 hover:text-tds-grey-900"
             }`}
           >
             기술 스택
           </button>
           <button
             onClick={() => setActiveTab("about")}
-            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] transition-all ${
+            className={`tds-pressable flex-1 rounded-[11px] py-2 text-[14px] ${
               activeTab === "about"
-                ? "bg-white font-bold text-[#191F28] shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
-                : "font-medium text-[#6B7684] hover:text-[#191F28]"
+                ? "bg-white font-bold text-tds-grey-900 shadow-[0_1px_2px_rgba(25,31,40,0.06)]"
+                : "font-medium text-tds-grey-600 hover:text-tds-grey-900"
             }`}
           >
             소개
@@ -352,54 +444,7 @@ export default function Home() {
         </div>
 
         {/* 5. 탭 콘텐츠 영역 */}
-        {/* 탭 1: 링크 (TDS ListRow Card) */}
-        {activeTab === "links" && (
-          <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_2px_8px_rgba(25,31,40,0.04)]">
-            <div className="px-5 py-3.5 border-b border-[#E5E8EB]">
-              <span className="text-[13px] font-semibold text-[#8B95A1]">
-                주요 바로가기
-              </span>
-            </div>
-
-            <div className="divide-y divide-[#E5E8EB]">
-              {MAIN_LINKS.map((item) => {
-                const IconComponent = item.icon;
-                return (
-                  <a
-                    key={item.id}
-                    href={item.href}
-                    target={item.isExternal ? "_blank" : undefined}
-                    rel="noopener noreferrer"
-                    className="tds-pressable flex items-center justify-between px-5 py-4 hover:bg-[#F9FAFB] transition-colors"
-                  >
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#F2F4F6] text-[#3182F6]">
-                        <IconComponent className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[16px] font-semibold text-[#191F28] truncate">
-                            {item.title}
-                          </span>
-                          {item.badge && (
-                            <span className="rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[11px] font-semibold text-[#3182F6]">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-[13px] text-[#6B7684] truncate">
-                          {item.subtitle}
-                        </p>
-                      </div>
-                    </div>
-
-                    <ChevronRight className="h-5 w-5 shrink-0 text-[#B0B8C1]" />
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {activeTab === "links" && <ProfileLinkList links={links} />}
 
         {/* 탭 2: 프로젝트 (TDS Project Cards) */}
         {activeTab === "projects" && (
@@ -411,10 +456,10 @@ export default function Home() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-[17px] font-bold text-[#191F28]">
+                    <h3 className="text-[17px] font-bold text-tds-grey-900">
                       {proj.title}
                     </h3>
-                    <p className="mt-0.5 text-[13px] text-[#8B95A1]">
+                    <p className="mt-0.5 text-[13px] text-tds-grey-500">
                       {proj.role} • {proj.period}
                     </p>
                   </div>
@@ -425,7 +470,7 @@ export default function Home() {
                         href={proj.github}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="tds-pressable flex h-8 w-8 items-center justify-center rounded-full bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
+                        className="tds-pressable flex h-8 w-8 items-center justify-center rounded-full bg-tds-grey-100 text-tds-grey-700 hover:bg-tds-grey-200"
                         title="GitHub 코드 확인"
                       >
                         <GithubIcon className="h-4 w-4" />
@@ -436,7 +481,7 @@ export default function Home() {
                         href={proj.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="tds-pressable flex h-8 w-8 items-center justify-center rounded-full bg-[#E8F3FF] text-[#3182F6] hover:bg-[#D5E8FF]"
+                        className="tds-pressable flex h-8 w-8 items-center justify-center rounded-full bg-tds-blue-50 text-tds-blue-500 hover:bg-[#D5E8FF]"
                         title="데모 보러가기"
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -445,7 +490,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <p className="mt-3 text-[14px] leading-relaxed text-[#4E5968]">
+                <p className="mt-3 text-[14px] leading-relaxed text-tds-grey-700">
                   {proj.description}
                 </p>
 
@@ -453,7 +498,7 @@ export default function Home() {
                   {proj.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full bg-[#F2F4F6] px-2.5 py-1 text-[12px] font-medium text-[#4E5968]"
+                      className="rounded-full bg-tds-grey-100 px-2.5 py-1 text-[12px] font-medium text-tds-grey-700"
                     >
                       {tag}
                     </span>
@@ -472,14 +517,14 @@ export default function Home() {
                 key={group.category}
                 className="rounded-[24px] bg-white p-5 shadow-[0_2px_8px_rgba(25,31,40,0.04)]"
               >
-                <h3 className="text-[14px] font-bold text-[#8B95A1] mb-3">
+                <h3 className="text-[14px] font-bold text-tds-grey-500 mb-3">
                   {group.category}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {group.skills.map((skill) => (
                     <span
                       key={skill}
-                      className="rounded-full bg-[#F2F4F6] px-3.5 py-1.5 text-[13px] font-semibold text-[#191F28]"
+                      className="rounded-full bg-tds-grey-100 px-3.5 py-1.5 text-[13px] font-semibold text-tds-grey-900"
                     >
                       {skill}
                     </span>
@@ -494,78 +539,82 @@ export default function Home() {
         {activeTab === "about" && (
           <div className="rounded-[24px] bg-white p-6 shadow-[0_2px_8px_rgba(25,31,40,0.04)] space-y-5">
             <div>
-              <h3 className="text-[17px] font-bold text-[#191F28]">
+              <h3 className="text-[17px] font-bold text-tds-grey-900">
                 어떤 개발자인지 소개해요
               </h3>
-              <p className="mt-2 text-[15px] leading-relaxed text-[#4E5968]">
+              <p className="mt-2 text-[15px] leading-relaxed text-tds-grey-700">
                 사용자가 매일 접하는 화면에서 불필요한 번거로움을 덜어내는 일에 큰 보람을 느껴요. 복잡한 시스템일수록 직관적인 화면 뒤로 숨기고, 빠른 반응 속도와 편안한 조작감을 제공하는 것을 중요하게 생각해요.
               </p>
             </div>
 
-            <div className="pt-4 border-t border-[#E5E8EB]">
-              <h4 className="text-[15px] font-bold text-[#191F28]">
+            <div className="pt-4 border-t border-tds-grey-200">
+              <h4 className="text-[15px] font-bold text-tds-grey-900">
                 이렇게 일하고 있어요
               </h4>
-              <ul className="mt-2 space-y-2 text-[14px] text-[#4E5968]">
+              <ul className="mt-2 space-y-2 text-[14px] text-tds-grey-700">
                 <li className="flex items-start gap-2">
-                  <span className="text-[#3182F6] font-bold">•</span>
+                  <span className="text-tds-blue-500 font-bold">•</span>
                   <span><strong>사용자 관점 우선</strong>: 기능 중심이 아닌 사용자의 행동 흐름을 먼저 고민해요.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#3182F6] font-bold">•</span>
+                  <span className="text-tds-blue-500 font-bold">•</span>
                   <span><strong>명확하고 읽기 쉬운 코드</strong>: 함께 일하는 동료가 바로 이해할 수 있는 코드를 작성해요.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-[#3182F6] font-bold">•</span>
+                  <span className="text-tds-blue-500 font-bold">•</span>
                   <span><strong>지속적인 배움과 공유</strong>: 새로운 기술을 익히고 팀과 나누는 과정을 즐겨요.</span>
                 </li>
               </ul>
             </div>
 
-            <div className="rounded-[16px] bg-[#F2F4F6] p-4 flex items-center justify-between">
-              <div>
-                <div className="text-[14px] font-bold text-[#191F28]">
-                  함께 이야기 나누고 싶으신가요?
+            {contactEmail && (
+              <div className="rounded-[16px] bg-tds-grey-100 p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[14px] font-bold text-tds-grey-900">
+                    함께 이야기 나누고 싶으신가요?
+                  </div>
+                  <div className="text-[12px] text-tds-grey-600">
+                    이메일로 문의주시면 빠르게 답변드릴게요.
+                  </div>
                 </div>
-                <div className="text-[12px] text-[#6B7684]">
-                  이메일로 문의주시면 빠르게 답변드릴게요.
-                </div>
+                <button
+                  onClick={() => handleCopyEmail(contactEmail)}
+                  className="tds-pressable inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[13px] font-semibold text-tds-grey-900 shadow-[0_1px_2px_rgba(25,31,40,0.04)]"
+                >
+                  <Mail className="h-3.5 w-3.5 text-tds-blue-500" />
+                  <span>메일 보내기</span>
+                </button>
               </div>
-              <button
-                onClick={handleCopyEmail}
-                className="tds-pressable inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#191F28] shadow-[0_1px_2px_rgba(25,31,40,0.04)]"
-              >
-                <Mail className="h-3.5 w-3.5 text-[#3182F6]" />
-                <span>메일 보내기</span>
-              </button>
-            </div>
+            )}
           </div>
         )}
 
         {/* 푸터 정보 */}
-        <footer className="mt-8 text-center text-[13px] text-[#8B95A1] space-y-1">
-          <p>© 2026 김태경. 모든 권리를 보유해요.</p>
-          <p className="text-[11px] text-[#B0B8C1]">Designed with Toss Design System (TDS)</p>
+        <footer className="mt-8 text-center text-[13px] text-tds-grey-500 space-y-1">
+          <p>© 2026 {profile.displayName}. 모든 권리를 보유해요.</p>
+          <p className="text-[11px] text-tds-grey-400">Designed with Toss Design System (TDS)</p>
         </footer>
       </main>
 
       {/* 6. TDS 하단 고정 액션 버튼 (BottomCTA) */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 pointer-events-none">
-        {/* 보호 그라디언트 (TDS 24~32px white/grey-100 → transparent) */}
-        <div className="h-8 w-full bg-gradient-to-t from-[#F2F4F6] to-transparent" />
-        <div className="bg-[#F2F4F6] px-4 pb-4 pt-1 pointer-events-auto">
-          <div className="mx-auto max-w-lg">
-            <a
-              href="https://calendly.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tds-pressable flex h-14 w-full items-center justify-center rounded-2xl bg-[#3182F6] hover:bg-[#1B64DA] text-[17px] font-bold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)]"
-            >
-              1:1 커피챗 신청하기
-            </a>
+      {coffeeLink && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 pointer-events-none">
+          {/* 보호 그라디언트 (TDS 24~32px white/grey-100 → transparent) */}
+          <div className="h-8 w-full bg-gradient-to-t from-tds-grey-100 to-transparent" />
+          <div className="bg-tds-grey-100 px-4 pb-4 pt-1 pointer-events-auto">
+            <div className="mx-auto max-w-lg">
+              <a
+                href={coffeeLink.href}
+                target={coffeeLink.isExternal ? "_blank" : undefined}
+                rel="noopener noreferrer"
+                className="tds-pressable flex h-14 w-full items-center justify-center rounded-2xl bg-tds-blue-500 hover:bg-tds-blue-600 text-[17px] font-bold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)]"
+              >
+                {coffeeLink.title}
+              </a>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

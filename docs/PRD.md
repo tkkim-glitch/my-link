@@ -7,9 +7,9 @@
 | **제품명** | 마이링크 (MyLink) |
 | **문서 버전** | v1.0.0 |
 | **작성일** | 2026-11-10 |
-| **기반 스택** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Lucide React |
+| **기반 스택** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui, Lucide React |
 | **데이터 스토리지** | 브라우저 `localStorage` 및 초기 Mock(예시) 데이터 |
-| **디자인 규격** | 프로젝트 내 `design.md` (Toss Design System - TDS 기반) |
+| **시각 디자인 기준** | 프로젝트 루트의 [design.md](../design.md) (Toss Design System 기반) |
 
 ---
 
@@ -118,6 +118,28 @@ export interface AnalyticsData {
   dailyStats: DailyStat[];   // 최근 7~30일 추이 배열
 }
 ```
+
+### 4.3 링크 목록 더미 데이터
+
+[기본 예시 링크 JSON](../src/data/mock-links.json)의 프로젝트 루트 기준 경로는 `src/data/mock-links.json`입니다. 기존 예시 링크 5개를 `LinkItem` 구조에 맞춘 JSON 배열로 담고 있으며, 이후 Mock API의 응답 본문으로 같은 배열을 사용할 수 있습니다.
+
+| 필드 | 역할 |
+| :--- | :--- |
+| `id` | 각 항목을 구분하는 고유 식별자입니다. |
+| `type` | 항목 유형입니다. 현재 예시 5개는 모두 일반 링크(`link`)입니다. |
+| `title` | 링크 목록에 표시하는 제목입니다. |
+| `url` | 링크를 눌렀을 때 이동할 대상 주소입니다. 이력서 예시의 `#`는 자리표시자입니다. |
+| `iconName` | 항목 옆에 표시할 Lucide 아이콘 이름입니다. |
+| `enabled` | 공개 목록에 표시할지 결정합니다. `false`인 항목은 숨깁니다. |
+| `clicks` | 링크의 누적 클릭 수입니다. 더미 데이터의 초깃값은 모두 `0`입니다. |
+| `order` | 목록의 표시 순서입니다. 작은 값부터 배치합니다. |
+| `subtitle` | 링크 제목 아래에 표시하는 보조 설명입니다. |
+| `badge` | ‘추천’, ‘최신글’ 등 제목 옆에 표시할 선택 라벨입니다. |
+| `isExternal` | 외부 링크 여부입니다. `true`인 항목은 새 탭에서 열고, `false`인 항목은 같은 탭에서 처리합니다. |
+
+공개 프로필은 브라우저 `localStorage`의 `mylink_links_data`를 먼저 확인합니다. 이 키에 저장된 링크 데이터가 없을 때 `src/data/mock-links.json`을 기본 예시 링크로 사용합니다. 저장값이 빈 배열(`[]`)이면 사용자가 링크를 비운 상태로 보고 빈 목록을 표시합니다.
+
+공개 프로필은 저장값이 없을 때 이 JSON을 읽고, 선택한 링크 목록을 재사용 가능한 ProfileLinkList 컴포넌트에 전달합니다.
 
 ---
 
@@ -239,9 +261,9 @@ export interface AnalyticsData {
 
 ---
 
-### 5.3 테마 및 디자인 시스템 (TDS 기준 & 테마 프리셋)
+### 5.3 디자인 콘셉트 및 테마
 
-프로젝트에 포함된 `design.md` (Toss Design System 스타일 토큰)을 엄격히 준수하여 디자인을 구성합니다.
+UI는 shadcn/ui를 기반으로 공용 컴포넌트를 만들어 재사용하고, Tailwind CSS 유틸리티 클래스로 스타일링합니다. 색상, 글꼴, 레이아웃, 간격, 모서리 등 시각 스타일은 프로젝트 루트의 [design.md](../design.md)에 정리된 토스 디자인 시스템(TDS)을 따릅니다.
 
 1. **디자인 원칙 (`design.md` 준용)**
    - **주요 브랜드 컬러**: 카노니컬 토스 블루 `oklch(0.620 0.191 258)` (`#3182F6`)를 메인 액션 및 하이라이트에 사용.
@@ -295,7 +317,8 @@ export interface AnalyticsData {
 ### 6.1 프론트엔드 스택
 - **Framework**: Next.js 16 (App Router 구조)
 - **Language**: TypeScript 5
-- **Styling**: Tailwind CSS v4, `design.md` 정의 색상 팔레트 및 토큰 매핑
+- **UI 컴포넌트 기반**: shadcn/ui를 바탕으로 공용 컴포넌트를 만들어 재사용합니다. 공개 프로필의 ProfileLinkList는 shadcn/ui Card로 링크 항목을 렌더링합니다.
+- **스타일링**: Tailwind CSS v4 유틸리티 클래스로 프로젝트 루트의 [design.md](../design.md)에 정리된 토스 디자인 시스템(TDS)의 시각 스타일을 적용
 - **Icons**: `lucide-react`
 - **DnD Library**: HTML5 Drag and Drop API 또는 경량 모던 드래그 앤 드롭 구현체
 

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "portfolio",
+    "type": "link",
+    "title": "개인 포트폴리오",
+    "url": "https://example.com/portfolio",
+    "iconName": "Globe",
+    "enabled": true,
+    "clicks": 0,
+    "order": 0,
+    "subtitle": "진행한 프로젝트와 인터랙티브 데모를 모아두었어요",
+    "badge": "추천",
+    "isExternal": true
+  },
+  {
+    "id": "blog",
+    "type": "link",
+    "title": "기술 블로그",
+    "url": "https://velog.io",
+    "iconName": "BookOpen",
+    "enabled": true,
+    "clicks": 0,
+    "order": 1,
+    "subtitle": "프론트엔드 개발 과정과 기술적인 고민을 기록해요",
+    "badge": "최신글",
+    "isExternal": true
+  },
+  {
+    "id": "github",
+    "type": "link",
+    "title": "깃허브 저장소",
+    "url": "https://github.com",
+    "iconName": "FolderGit2",
+    "enabled": true,
+    "clicks": 0,
+    "order": 2,
+    "subtitle": "오픈소스 기여 및 사이드 프로젝트 코드를 확인해 보세요",
+    "isExternal": true
+  },
+  {
+    "id": "resume",
+    "type": "link",
+    "title": "이력서 열람하기",
+    "url": "#",
+    "iconName": "FileText",
+    "enabled": true,
+    "clicks": 0,
+    "order": 3,
+    "subtitle": "경력 사항과 상세 프로젝트 성과를 정리해 두었어요",
+    "isExternal": false
+  },
+  {
+    "id": "coffee",
+    "type": "link",
+    "title": "1:1 커피챗 신청하기",
+    "url": "https://calendly.com",
+    "iconName": "Coffee",
+    "enabled": true,
+    "clicks": 0,
+    "order": 4,
+    "subtitle": "커리어 고민이나 가벼운 기술 이야기 모두 환영해요",
+    "badge": "열려있음",
+    "isExternal": true
+  }
+]
