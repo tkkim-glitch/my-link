@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { FirebaseError } from "firebase/app";
+import { addDoc, collection, onSnapshot, serverTimestamp, Timestamp } from "firebase/firestore";
 import {
   Mail,
   Globe,
@@ -17,8 +19,11 @@ import {
   Music2,
   Play,
   AtSign,
+  LinkIcon,
 } from "lucide-react";
+import { AddLinkDialog } from "@/components/profile/add-link-dialog";
 import { ProfileLinkList, type LinkBlock, type MainLink } from "@/components/profile/profile-link-list";
+import { Button } from "@/components/ui/button";
 import mockLinks from "@/data/mock-links.json";
 
 type TabType = "links" | "projects" | "skills" | "about";
@@ -168,6 +173,21 @@ function parseLinks(data: unknown[]): LinkBlock[] | null {
     .map(({ block }) => block);
 }
 
+type SavedLink = MainLink & { createdAt: Timestamp | null };
+
+async function getSavedLinksCollection() {
+  const { db } = await import("@/lib/firebase");
+  return collection(db, "users", "anonymous", "links");
+}
+
+function newestLinkFirst(a: SavedLink, b: SavedLink) {
+  if (!a.createdAt) return b.createdAt ? 1 : a.id.localeCompare(b.id);
+  if (!b.createdAt) return -1;
+  return b.createdAt.seconds - a.createdAt.seconds ||
+    b.createdAt.nanoseconds - a.createdAt.nanoseconds ||
+    a.id.localeCompare(b.id);
+}
+
 const DEFAULT_LINKS = parseLinks(mockLinks) ?? [];
 
 function readLinks(): LinkBlock[] {
@@ -230,7 +250,78 @@ export default function Home() {
   const [hasCheered, setHasCheered] = useState<boolean>(false);
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [links, setLinks] = useState<LinkBlock[]>(DEFAULT_LINKS);
+  const [savedLinks, setSavedLinks] = useState<SavedLink[]>([]);
+  const [addedLinks, setAddedLinks] = useState<SavedLink[]>([]);
+  const [linksLoadError, setLinksLoadError] = useState("");
   const [avatarFailed, setAvatarFailed] = useState(false);
+
+  async function saveLink(link: MainLink) {
+    try {
+      const doc = await addDoc(await getSavedLinksCollection(), {
+        title: link.title,
+        url: link.href,
+        createdAt: serverTimestamp(),
+      });
+      setAddedLinks((current) => [...current, {
+        ...link,
+        id: `firestore-${doc.id}`,
+        createdAt: Timestamp.now(),
+      }]);
+    } catch (error) {
+      if (error instanceof FirebaseError && error.code === "permission-denied") {
+        throw new Error("Firestore에 링크를 저장할 권한이 없어요.");
+      }
+      throw new Error("링크를 저장하지 못했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  // The snapshot replaces the local estimate for any document it has already received.
+  const savedLinksById = new Map(addedLinks.map((link) => [link.id, link]));
+  for (const link of savedLinks) savedLinksById.set(link.id, link);
+  const sortedSavedLinks = [...savedLinksById.values()].sort(newestLinkFirst);
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    function showLoadError(error: unknown) {
+      if (disposed) return;
+      setLinksLoadError(error instanceof FirebaseError && error.code === "permission-denied"
+        ? "저장된 링크를 불러올 권한이 없어요."
+        : "저장된 링크를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.");
+    }
+
+    void getSavedLinksCollection().then((linksCollection) => {
+      if (disposed) return;
+
+      unsubscribe = onSnapshot(linksCollection, { includeMetadataChanges: true }, (snapshot) => {
+        // Read the whole collection so older documents without createdAt are included.
+        const items = snapshot.docs.flatMap((doc): SavedLink[] => {
+          if (doc.metadata.hasPendingWrites) return [];
+          const { title, url, createdAt } = doc.data();
+          const href = webUrl(url);
+          if (typeof title !== "string" || !title.trim() || !href) return [];
+          return [{
+            id: `firestore-${doc.id}`,
+            title: title.trim(),
+            href,
+            subtitle: href,
+            icon: LinkIcon,
+            isExternal: true,
+            createdAt: createdAt instanceof Timestamp ? createdAt : null,
+          }];
+        });
+
+        setSavedLinks(items);
+      }, showLoadError);
+    }).catch(showLoadError);
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, []);
+
   const contactEmail = profile.socials.find(({ platform }) => platform === "email")?.url;
   const coffeeLink = links.find((item): item is MainLink => "href" in item && item.id === "coffee");
 
@@ -444,7 +535,24 @@ export default function Home() {
         </div>
 
         {/* 5. 탭 콘텐츠 영역 */}
-        {activeTab === "links" && <ProfileLinkList links={links} />}
+        {activeTab === "links" && (
+          <div className="space-y-4">
+            <ProfileLinkList links={[...links, ...sortedSavedLinks]} />
+            {linksLoadError && <p role="alert" className="px-2 text-sm text-destructive">{linksLoadError}</p>}
+            <AddLinkDialog
+              onAdd={saveLink}
+              trigger={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-12 w-full rounded-[14px] border-tds-grey-200 bg-tds-grey-100 text-[15px] font-semibold text-tds-grey-900 hover:bg-tds-grey-200 focus-visible:ring-tds-blue-500/50"
+                >
+                  + 링크 추가
+                </Button>
+              }
+            />
+          </div>
+        )}
 
         {/* 탭 2: 프로젝트 (TDS Project Cards) */}
         {activeTab === "projects" && (
