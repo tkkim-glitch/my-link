@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { readLinkForm } from "@/lib/link-form";
 
 const primaryButton =
   "h-12 rounded-[14px] bg-tds-blue-500 px-4 text-[15px] font-semibold text-white hover:bg-tds-blue-600 focus-visible:ring-tds-blue-500/50";
@@ -42,40 +43,16 @@ export function AddLinkDialog({
     if (saving) return;
     setSaveError("");
     const form = event.currentTarget;
-    const data = new FormData(form);
-    const title = String(data.get("title") ?? "").trim();
-    const address = String(data.get("url") ?? "").trim();
-
-    if (!title) {
-      window.alert("제목을 입력해주세요");
-      return;
-    }
-
-    if (!address) {
-      window.alert("주소를 입력해주세요");
-      return;
-    }
-
-    let url: URL;
-    try {
-      url = new URL(address);
-    } catch {
-      window.alert("올바른 링크 주소를 입력해 주세요.");
-      return;
-    }
-
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      window.alert("http:// 또는 https://로 시작하는 주소를 입력해 주세요.");
-      return;
-    }
+    const link = readLinkForm(form);
+    if (!link) return;
 
     setSaving(true);
     try {
       await onAdd({
         id: "new-" + crypto.getRandomValues(new Uint32Array(4)).join("-"),
-        title,
-        href: url.href,
-        subtitle: url.href,
+        title: link.title,
+        href: link.url,
+        subtitle: link.url,
         icon: LinkIcon,
         isExternal: true,
       });

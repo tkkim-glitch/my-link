@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
@@ -15,7 +15,13 @@ export interface MainLink {
 
 export type LinkBlock = MainLink | { id: string; title: string; type: "header" };
 
-export function ProfileLinkList({ links }: { links: readonly LinkBlock[] }) {
+export function ProfileLinkList({
+  links,
+  renderLink,
+}: {
+  links: readonly LinkBlock[];
+  renderLink?: (link: MainLink) => ReactNode;
+}) {
   const headingId = useId();
 
   return (
@@ -37,44 +43,48 @@ export function ProfileLinkList({ links }: { links: readonly LinkBlock[] }) {
           );
         }
 
-        const Icon = item.icon;
-        return (
-          <a
-            key={item.id}
-            href={item.href}
-            target={item.isExternal ? "_blank" : undefined}
-            rel="noopener noreferrer"
-            className="tds-pressable block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tds-blue-500"
-          >
-            <Card className="flex-row items-center justify-between gap-3.5 rounded-2xl border border-tds-grey-200 bg-white px-6 py-3.5 ring-0 transition-colors duration-200 hover:bg-tds-grey-50">
-              <div className="flex min-w-0 items-center gap-3.5">
-                <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-tds-grey-100 text-tds-blue-500">
-                  {item.emoji ? <span>{item.emoji}</span> : <Icon className="size-5" />}
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-lg font-semibold text-tds-grey-900">
-                      {item.title}
-                    </span>
-                    {item.badge && (
-                      <span className="shrink-0 rounded-full bg-tds-blue-50 px-2 py-0.5 text-[11px] font-semibold text-tds-blue-500">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                  {item.subtitle && (
-                    <p className="mt-0.5 truncate text-[15px] leading-normal text-tds-grey-600">
-                      {item.subtitle}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-tds-grey-400" />
-            </Card>
-          </a>
-        );
+        return renderLink ? renderLink(item) : <ProfileLinkCard key={item.id} item={item} />;
       })}
     </section>
+  );
+}
+
+export function ProfileLinkCard({ item, children }: { item: MainLink; children?: ReactNode }) {
+  const Icon = item.icon;
+  return (
+    <Card className="gap-0 rounded-2xl border border-tds-grey-200 bg-white py-0 ring-0 transition-colors duration-200 hover:bg-tds-grey-50">
+      <a
+        href={item.href}
+        target={item.isExternal ? "_blank" : undefined}
+        rel="noopener noreferrer"
+        className="tds-pressable flex min-w-0 items-center justify-between gap-3.5 rounded-2xl px-6 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tds-blue-500"
+      >
+        <div className="flex min-w-0 items-center gap-3.5">
+          <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-tds-grey-100 text-tds-blue-500">
+            {item.emoji ? <span>{item.emoji}</span> : <Icon className="size-5" />}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-lg font-semibold text-tds-grey-900">
+                {item.title}
+              </span>
+              {item.badge && (
+                <span className="shrink-0 rounded-full bg-tds-blue-50 px-2 py-0.5 text-[11px] font-semibold text-tds-blue-500">
+                  {item.badge}
+                </span>
+              )}
+            </div>
+            {item.subtitle && (
+              <p className="mt-0.5 truncate text-[15px] leading-normal text-tds-grey-600">
+                {item.subtitle}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-tds-grey-400" />
+      </a>
+      {children && <div className="space-y-3 px-6 pb-3.5">{children}</div>}
+    </Card>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FirebaseError } from "firebase/app";
-import { addDoc, collection, onSnapshot, serverTimestamp, Timestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
 import {
   Mail,
   Globe,
@@ -22,7 +22,8 @@ import {
   LinkIcon,
 } from "lucide-react";
 import { AddLinkDialog } from "@/components/profile/add-link-dialog";
-import { ProfileLinkList, type LinkBlock, type MainLink } from "@/components/profile/profile-link-list";
+import { SavedLinkCard } from "@/components/profile/saved-link-card";
+import { ProfileLinkCard, ProfileLinkList, type LinkBlock, type MainLink } from "@/components/profile/profile-link-list";
 import { Button } from "@/components/ui/button";
 import mockLinks from "@/data/mock-links.json";
 
@@ -173,7 +174,7 @@ function parseLinks(data: unknown[]): LinkBlock[] | null {
     .map(({ block }) => block);
 }
 
-type SavedLink = MainLink & { createdAt: Timestamp | null };
+type SavedLink = MainLink & { documentId: string; createdAt: Timestamp | null };
 
 async function getSavedLinksCollection() {
   const { db } = await import("@/lib/firebase");
@@ -252,6 +253,7 @@ export default function Home() {
   const [links, setLinks] = useState<LinkBlock[]>(DEFAULT_LINKS);
   const [savedLinks, setSavedLinks] = useState<SavedLink[]>([]);
   const [addedLinks, setAddedLinks] = useState<SavedLink[]>([]);
+  const pendingLinkChanges = useRef(new Set<string>());
   const [linksLoadError, setLinksLoadError] = useState("");
   const [avatarFailed, setAvatarFailed] = useState(false);
 
@@ -265,6 +267,7 @@ export default function Home() {
       setAddedLinks((current) => [...current, {
         ...link,
         id: `firestore-${doc.id}`,
+        documentId: doc.id,
         createdAt: Timestamp.now(),
       }]);
     } catch (error) {
@@ -272,6 +275,36 @@ export default function Home() {
         throw new Error("Firestore에 링크를 저장할 권한이 없어요.");
       }
       throw new Error("링크를 저장하지 못했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  async function changeSavedLink(link: SavedLink, values?: { title: string; url: string }) {
+    const pending = pendingLinkChanges.current;
+    if (pending.has(link.documentId)) return;
+    pending.add(link.documentId);
+    try {
+      const reference = doc(await getSavedLinksCollection(), link.documentId);
+      if (values) {
+        await updateDoc(reference, values);
+        const update = (item: SavedLink) => item.documentId === link.documentId
+          ? { ...item, title: values.title, href: values.url, subtitle: values.url }
+          : item;
+        setSavedLinks((current) => current.map(update));
+        setAddedLinks((current) => current.map(update));
+      } else {
+        const keep = (item: SavedLink) => item.documentId !== link.documentId;
+        await deleteDoc(reference);
+        setSavedLinks((current) => current.filter(keep));
+        setAddedLinks((current) => current.filter(keep));
+      }
+    } catch (error) {
+      const action = values ? "수정" : "삭제";
+      if (error instanceof FirebaseError && error.code === "permission-denied") {
+        throw new Error("이 링크를 " + action + "할 권한이 없어요.");
+      }
+      throw new Error("링크를 " + action + "하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      pending.delete(link.documentId);
     }
   }
 
@@ -296,13 +329,15 @@ export default function Home() {
 
       unsubscribe = onSnapshot(linksCollection, { includeMetadataChanges: true }, (snapshot) => {
         // Read the whole collection so older documents without createdAt are included.
+        const pending = new Set(pendingLinkChanges.current);
         const items = snapshot.docs.flatMap((doc): SavedLink[] => {
-          if (doc.metadata.hasPendingWrites) return [];
+          if (doc.metadata.hasPendingWrites || pending.has(doc.id)) return [];
           const { title, url, createdAt } = doc.data();
           const href = webUrl(url);
           if (typeof title !== "string" || !title.trim() || !href) return [];
           return [{
             id: `firestore-${doc.id}`,
+            documentId: doc.id,
             title: title.trim(),
             href,
             subtitle: href,
@@ -312,7 +347,13 @@ export default function Home() {
           }];
         });
 
-        setSavedLinks(items);
+        // Local delete events omit the document, so keep its last confirmed value too.
+        setSavedLinks((current) => [
+          ...items,
+          ...current.filter((item) => pending.has(item.documentId)),
+        ]);
+        const confirmedIds = new Set(items.map((item) => item.documentId));
+        setAddedLinks((current) => current.filter((item) => !confirmedIds.has(item.documentId)));
       }, showLoadError);
     }).catch(showLoadError);
 
@@ -537,7 +578,21 @@ export default function Home() {
         {/* 5. 탭 콘텐츠 영역 */}
         {activeTab === "links" && (
           <div className="space-y-4">
-            <ProfileLinkList links={[...links, ...sortedSavedLinks]} />
+            <ProfileLinkList
+              links={[...links, ...sortedSavedLinks]}
+              renderLink={(link) => {
+                const savedLink = "documentId" in link ? savedLinksById.get(link.id) : undefined;
+                if (!savedLink) return <ProfileLinkCard key={link.id} item={link} />;
+                return (
+                  <SavedLinkCard
+                    key={link.id}
+                    link={savedLink}
+                    onSave={(values) => changeSavedLink(savedLink, values)}
+                    onDelete={() => changeSavedLink(savedLink)}
+                  />
+                );
+              }}
+            />
             {linksLoadError && <p role="alert" className="px-2 text-sm text-destructive">{linksLoadError}</p>}
             <AddLinkDialog
               onAdd={saveLink}
