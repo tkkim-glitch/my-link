@@ -17,10 +17,12 @@ import { readLinkForm } from "@/lib/link-form";
 
 export function SavedLinkCard({
   link,
+  clickCount,
   onSave,
   onDelete,
 }: {
   link: MainLink;
+  clickCount: number;
   onSave: (values: { title: string; url: string }) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
@@ -63,7 +65,8 @@ export function SavedLinkCard({
 
   return (
     <ProfileLinkCard item={link}>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="mr-auto text-sm text-tds-grey-700 tabular-nums">클릭 {clickCount.toLocaleString("ko-KR")}회</span>
         <Button type="button" variant="outline" size="sm" disabled={pending || editing} onClick={() => {
           setEditError("");
           setEditing(true);

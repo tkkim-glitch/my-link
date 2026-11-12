@@ -1,31 +1,36 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { FirebaseError } from "firebase/app";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
+import { useState, useEffect } from "react";
 import {
   Mail,
-  Globe,
-  FileText,
-  Coffee,
   Check,
   Heart,
   Share2,
   BookOpen,
-  FolderGit2,
   ExternalLink,
   Copy,
   Camera,
   Music2,
   Play,
   AtSign,
-  LinkIcon,
+  ChartNoAxesColumnIncreasing,
+  ChevronDown,
+  LogOut,
+  UserRound,
 } from "lucide-react";
-import { AddLinkDialog } from "@/components/profile/add-link-dialog";
-import { SavedLinkCard } from "@/components/profile/saved-link-card";
-import { ProfileLinkCard, ProfileLinkList, type LinkBlock, type MainLink } from "@/components/profile/profile-link-list";
+import { PublicLinkClick } from "@/components/profile/public-link-click";
+import { ProfileLinkCard, ProfileLinkList } from "@/components/profile/profile-link-list";
+import Link from "next/link";
+import { DropdownMenu } from "radix-ui";
+import { WelcomeScreen } from "@/components/welcome-screen";
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import mockLinks from "@/data/mock-links.json";
+import { publicProfilePath } from "@/lib/public-profile-path";
+import { profileFromAccount } from "@/lib/user-profile";
+import { useUserLinks } from "@/lib/use-user-links";
+
+const profileMenuItemClass =
+  "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 outline-none data-highlighted:bg-tds-grey-100 data-disabled:cursor-default data-disabled:opacity-50";
 
 type TabType = "links" | "projects" | "skills" | "about";
 
@@ -62,11 +67,9 @@ const SOCIAL_PLATFORMS = {
 
 type SocialPlatform = keyof typeof SOCIAL_PLATFORMS;
 type Social = { id: string; platform: SocialPlatform; url: string };
-type PublicProfile = { displayName: string; bio: string; avatarUrl: string; socials: Social[] };
+type ProfileExtras = { avatarUrl: string; socials: Social[] };
 
-const DEFAULT_PROFILE: PublicProfile = {
-  displayName: "김태경",
-  bio: "기술을 통해 일상의 불편을 줄이고, 누구에게나 당연하고 편리한 사용자 경험을 설계해요. 가독성과 확장성을 갖춘 단단한 코드를 지향해요.",
+const DEFAULT_PROFILE_EXTRAS: ProfileExtras = {
   avatarUrl: "",
   socials: [
     { id: "github", platform: "github", url: "https://github.com" },
@@ -76,7 +79,6 @@ const DEFAULT_PROFILE: PublicProfile = {
   ],
 };
 
-const LINK_ICONS = { Globe, BookOpen, FolderGit2, FileText, Coffee, ExternalLink, Mail };
 const SOCIAL_CHIP_CLASS =
   "tds-pressable inline-flex h-[34px] items-center gap-1.5 rounded-full bg-tds-grey-100 px-3.5 text-[13px] font-medium text-tds-grey-800 hover:bg-tds-grey-200";
 
@@ -107,11 +109,10 @@ function isSocialPlatform(value: unknown): value is SocialPlatform {
   return typeof value === "string" && Object.hasOwn(SOCIAL_PLATFORMS, value);
 }
 
-function readProfile(): PublicProfile {
+function readProfileExtras(): ProfileExtras {
   const data = readStorage("mylink_profile_data");
-  if (!isRecord(data) || typeof data.displayName !== "string" || !data.displayName.trim() ||
-      typeof data.bio !== "string" || !Array.isArray(data.socials)) {
-    return DEFAULT_PROFILE;
+  if (!isRecord(data) || !Array.isArray(data.socials)) {
+    return DEFAULT_PROFILE_EXTRAS;
   }
 
   const socials = data.socials.flatMap((item: unknown): Social[] => {
@@ -127,73 +128,9 @@ function readProfile(): PublicProfile {
   });
 
   return {
-    displayName: data.displayName.trim(),
-    bio: data.bio,
     avatarUrl: data.avatarUrl ? webUrl(data.avatarUrl, window.location.origin) : "",
     socials,
   };
-}
-
-function parseLinks(data: unknown[]): LinkBlock[] | null {
-  const blocks = data.flatMap((item: unknown): { order: number; enabled: boolean; block: LinkBlock }[] => {
-    if (!isRecord(item) || typeof item.id !== "string" || typeof item.title !== "string" ||
-        !item.title.trim() || typeof item.enabled !== "boolean" ||
-        typeof item.order !== "number" || !Number.isFinite(item.order)) return [];
-
-    const { id, title, order, enabled, type, iconName, url, subtitle, badge } = item;
-    if (type === "header") return [{ order, enabled, block: { id, title, type } }];
-    const isExternal = item.isExternal !== false;
-    const href = !isExternal && typeof url === "string" && url.startsWith("#") ? url : webUrl(url);
-    if (type !== "link" || (enabled && !href)) return [];
-
-    const icon = typeof iconName === "string" && Object.hasOwn(LINK_ICONS, iconName)
-      ? LINK_ICONS[iconName as keyof typeof LINK_ICONS]
-      : Globe;
-    const emoji = typeof iconName === "string" && /\p{Extended_Pictographic}/u.test(iconName)
-      ? iconName
-      : undefined;
-    return [{
-      order,
-      enabled,
-      block: {
-        id,
-        title,
-        href,
-        icon,
-        emoji,
-        isExternal,
-        subtitle: typeof subtitle === "string" ? subtitle : undefined,
-        badge: typeof badge === "string" ? badge : undefined,
-      },
-    }];
-  });
-
-  if (data.length > 0 && blocks.length === 0) return null;
-  return blocks.filter(({ enabled }) => enabled)
-    .sort((a, b) => a.order - b.order)
-    .map(({ block }) => block);
-}
-
-type SavedLink = MainLink & { documentId: string; createdAt: Timestamp | null };
-
-async function getSavedLinksCollection() {
-  const { db } = await import("@/lib/firebase");
-  return collection(db, "users", "anonymous", "links");
-}
-
-function newestLinkFirst(a: SavedLink, b: SavedLink) {
-  if (!a.createdAt) return b.createdAt ? 1 : a.id.localeCompare(b.id);
-  if (!b.createdAt) return -1;
-  return b.createdAt.seconds - a.createdAt.seconds ||
-    b.createdAt.nanoseconds - a.createdAt.nanoseconds ||
-    a.id.localeCompare(b.id);
-}
-
-const DEFAULT_LINKS = parseLinks(mockLinks) ?? [];
-
-function readLinks(): LinkBlock[] {
-  const saved = readStorage("mylink_links_data");
-  return Array.isArray(saved) ? parseLinks(saved) ?? DEFAULT_LINKS : DEFAULT_LINKS;
 }
 
 const PROJECTS = [
@@ -245,131 +182,19 @@ const SKILL_GROUPS = [
 ];
 
 export default function Home() {
+  const { user, profile: savedProfile, profileError, busy, error, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("links");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [cheerCount, setCheerCount] = useState<number>(142);
   const [hasCheered, setHasCheered] = useState<boolean>(false);
-  const [profile, setProfile] = useState(DEFAULT_PROFILE);
-  const [links, setLinks] = useState<LinkBlock[]>(DEFAULT_LINKS);
-  const [savedLinks, setSavedLinks] = useState<SavedLink[]>([]);
-  const [addedLinks, setAddedLinks] = useState<SavedLink[]>([]);
-  const pendingLinkChanges = useRef(new Set<string>());
-  const [linksLoadError, setLinksLoadError] = useState("");
+  const [profileExtras, setProfileExtras] = useState(DEFAULT_PROFILE_EXTRAS);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
-  async function saveLink(link: MainLink) {
-    try {
-      const doc = await addDoc(await getSavedLinksCollection(), {
-        title: link.title,
-        url: link.href,
-        createdAt: serverTimestamp(),
-      });
-      setAddedLinks((current) => [...current, {
-        ...link,
-        id: `firestore-${doc.id}`,
-        documentId: doc.id,
-        createdAt: Timestamp.now(),
-      }]);
-    } catch (error) {
-      if (error instanceof FirebaseError && error.code === "permission-denied") {
-        throw new Error("Firestore에 링크를 저장할 권한이 없어요.");
-      }
-      throw new Error("링크를 저장하지 못했어요. 다시 시도해 주세요.");
-    }
-  }
-
-  async function changeSavedLink(link: SavedLink, values?: { title: string; url: string }) {
-    const pending = pendingLinkChanges.current;
-    if (pending.has(link.documentId)) return;
-    pending.add(link.documentId);
-    try {
-      const reference = doc(await getSavedLinksCollection(), link.documentId);
-      if (values) {
-        await updateDoc(reference, values);
-        const update = (item: SavedLink) => item.documentId === link.documentId
-          ? { ...item, title: values.title, href: values.url, subtitle: values.url }
-          : item;
-        setSavedLinks((current) => current.map(update));
-        setAddedLinks((current) => current.map(update));
-      } else {
-        const keep = (item: SavedLink) => item.documentId !== link.documentId;
-        await deleteDoc(reference);
-        setSavedLinks((current) => current.filter(keep));
-        setAddedLinks((current) => current.filter(keep));
-      }
-    } catch (error) {
-      const action = values ? "수정" : "삭제";
-      if (error instanceof FirebaseError && error.code === "permission-denied") {
-        throw new Error("이 링크를 " + action + "할 권한이 없어요.");
-      }
-      throw new Error("링크를 " + action + "하지 못했어요. 다시 시도해 주세요.");
-    } finally {
-      pending.delete(link.documentId);
-    }
-  }
-
-  // The snapshot replaces the local estimate for any document it has already received.
-  const savedLinksById = new Map(addedLinks.map((link) => [link.id, link]));
-  for (const link of savedLinks) savedLinksById.set(link.id, link);
-  const sortedSavedLinks = [...savedLinksById.values()].sort(newestLinkFirst);
-
-  useEffect(() => {
-    let disposed = false;
-    let unsubscribe: (() => void) | undefined;
-
-    function showLoadError(error: unknown) {
-      if (disposed) return;
-      setLinksLoadError(error instanceof FirebaseError && error.code === "permission-denied"
-        ? "저장된 링크를 불러올 권한이 없어요."
-        : "저장된 링크를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.");
-    }
-
-    void getSavedLinksCollection().then((linksCollection) => {
-      if (disposed) return;
-
-      unsubscribe = onSnapshot(linksCollection, { includeMetadataChanges: true }, (snapshot) => {
-        // Read the whole collection so older documents without createdAt are included.
-        const pending = new Set(pendingLinkChanges.current);
-        const items = snapshot.docs.flatMap((doc): SavedLink[] => {
-          if (doc.metadata.hasPendingWrites || pending.has(doc.id)) return [];
-          const { title, url, createdAt } = doc.data();
-          const href = webUrl(url);
-          if (typeof title !== "string" || !title.trim() || !href) return [];
-          return [{
-            id: `firestore-${doc.id}`,
-            documentId: doc.id,
-            title: title.trim(),
-            href,
-            subtitle: href,
-            icon: LinkIcon,
-            isExternal: true,
-            createdAt: createdAt instanceof Timestamp ? createdAt : null,
-          }];
-        });
-
-        // Local delete events omit the document, so keep its last confirmed value too.
-        setSavedLinks((current) => [
-          ...items,
-          ...current.filter((item) => pending.has(item.documentId)),
-        ]);
-        const confirmedIds = new Set(items.map((item) => item.documentId));
-        setAddedLinks((current) => current.filter((item) => !confirmedIds.has(item.documentId)));
-      }, showLoadError);
-    }).catch(showLoadError);
-
-    return () => {
-      disposed = true;
-      unsubscribe?.();
-    };
-  }, []);
-
-  const contactEmail = profile.socials.find(({ platform }) => platform === "email")?.url;
-  const coffeeLink = links.find((item): item is MainLink => "href" in item && item.id === "coffee");
+  const contactEmail = profileExtras.socials.find(({ platform }) => platform === "email")?.url;
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setProfile(readProfile());
-      setLinks(readLinks());
+      setProfileExtras(readProfileExtras());
 
       const savedCount = readStorage("tds_cheer_count");
       if (typeof savedCount === "number" && Number.isInteger(savedCount)) {
@@ -414,15 +239,31 @@ export default function Home() {
     }
   };
 
+  if (!user) return <WelcomeScreen />;
+
+  const profile = savedProfile ?? profileFromAccount(user);
+  const displayName = profile.displayName || profile.username || "Google 사용자";
+  const publicPath = profile.publicUsername ? publicProfilePath(profile.publicUsername) : "";
+
+  async function copyPublicLink() {
+    if (!publicPath) return;
+    try {
+      await navigator.clipboard.writeText(new URL(publicPath, window.location.origin).href);
+      showToast("공개 프로필 링크를 복사했어요.");
+    } catch {
+      showToast("공개 프로필 링크를 복사하지 못했어요.");
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-tds-grey-100 text-tds-grey-900 font-sans pb-28">
+    <div className="min-h-screen bg-tds-grey-100 text-tds-grey-900 font-sans pb-12">
       {/* 1. TDS 상단 앱 바 (TopAppBar) */}
-      <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between bg-tds-grey-100/90 px-5 backdrop-blur-md">
+      <header className="sticky top-0 z-30 flex min-h-14 w-full flex-wrap items-center justify-between gap-2 bg-tds-grey-100/90 px-4 py-2 backdrop-blur-md">
         <span className="text-[17px] font-bold text-tds-grey-900 tracking-tight">
           마이링크
         </span>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {/* 응원 버튼 (TDS 서브 버튼) */}
           <button
             onClick={handleCheer}
@@ -447,8 +288,53 @@ export default function Home() {
           >
             <Share2 className="h-4 w-4" />
           </button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button type="button" variant="outline" size="sm" aria-label="프로필 메뉴" className="max-w-40 gap-2 rounded-full bg-white">
+                <span aria-hidden="true" className="grid size-5 shrink-0 place-items-center rounded-full bg-tds-blue-50 text-xs font-semibold text-tds-blue-600">
+                  {Array.from(displayName)[0]}
+                </span>
+                <span className="truncate">{displayName}</span>
+                <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-tds-grey-600" />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                sideOffset={8}
+                collisionPadding={16}
+                className="z-50 w-56 max-w-[calc(100vw-2rem)] rounded-2xl border border-tds-grey-200 bg-white p-2 text-sm text-tds-grey-900 shadow-lg"
+              >
+                <DropdownMenu.Item asChild className={profileMenuItemClass}>
+                  <Link href="/mypage"><UserRound aria-hidden="true" className="size-4 text-tds-grey-600" />마이페이지</Link>
+                </DropdownMenu.Item>
+                {publicPath ? (
+                  <DropdownMenu.Item asChild className={profileMenuItemClass}>
+                    <a href={publicPath} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink aria-hidden="true" className="size-4 text-tds-grey-600" />내 페이지 미리보기
+                    </a>
+                  </DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.Item disabled className={profileMenuItemClass}>
+                    <ExternalLink aria-hidden="true" className="size-4 text-tds-grey-600" />내 페이지 미리보기
+                  </DropdownMenu.Item>
+                )}
+                <DropdownMenu.Item disabled={!publicPath} onSelect={() => void copyPublicLink()} className={profileMenuItemClass}>
+                  <Copy aria-hidden="true" className="size-4 text-tds-grey-600" />내 페이지 링크 복사
+                </DropdownMenu.Item>
+                <DropdownMenu.Item asChild className={profileMenuItemClass}>
+                  <Link href="/stats"><ChartNoAxesColumnIncreasing aria-hidden="true" className="size-4 text-tds-blue-500" />통계 확인하기</Link>
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator className="my-1 h-px bg-tds-grey-200" />
+                <DropdownMenu.Item disabled={busy} onSelect={() => void logout()} className={profileMenuItemClass}>
+                  <LogOut aria-hidden="true" className="size-4 text-tds-grey-600" />로그아웃
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </header>
+      {error && <p role="alert" className="mx-auto max-w-lg px-5 py-2 text-sm text-destructive">{error}</p>}
 
       {/* 2. TDS 토스트 메시지 (TDS Toast) */}
       {toastMessage && (
@@ -467,37 +353,32 @@ export default function Home() {
           <div className="flex items-start gap-4">
             {/* 아바타 */}
             <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-tds-blue-50 text-2xl font-bold text-tds-blue-500">
-              {profile.avatarUrl && !avatarFailed ? (
+              {profileExtras.avatarUrl && !avatarFailed ? (
                 // 브라우저에 저장된 임의의 이미지 URL을 직접 로드해요.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={profile.avatarUrl}
+                  src={profileExtras.avatarUrl}
                   alt=""
                   className="h-full w-full object-cover"
                   onError={() => setAvatarFailed(true)}
                 />
-              ) : Array.from(profile.displayName)[0]}
+              ) : Array.from(displayName)[0]}
             </div>
 
             {/* 인적사항 */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-[22px] font-bold text-tds-grey-900 tracking-tight">
-                  {profile.displayName}
-                </h1>
-                {profile === DEFAULT_PROFILE && (
-                  <span className="inline-flex items-center rounded-full bg-tds-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-tds-blue-500">
-                    개발자
-                  </span>
-                )}
-              </div>
-              {profile === DEFAULT_PROFILE && (
-                <p className="mt-0.5 text-[14px] font-medium text-tds-grey-700">
-                  Frontend & Software Engineer
+              <h1 className="break-words text-[22px] font-bold tracking-tight text-tds-grey-900">
+                {displayName}
+              </h1>
+              {profile.username && (
+                <p className="mt-0.5 break-words text-[14px] font-medium text-tds-grey-700">
+                  @{profile.username}
                 </p>
               )}
             </div>
           </div>
+
+          {profileError && <p role="alert" className="mt-4 break-words text-sm text-destructive">{profileError}</p>}
 
           {/* 소개글 (TDS 해요체 원칙) */}
           {profile.bio && (
@@ -507,9 +388,9 @@ export default function Home() {
           )}
 
           {/* 소셜 링크 칩 (TDS Chips) */}
-          {profile.socials.length > 0 && (
+          {profileExtras.socials.length > 0 && (
             <div className="mt-5 flex flex-wrap gap-2 pt-4 border-t border-tds-grey-200">
-              {profile.socials.map(({ id, platform, url }) => {
+              {profileExtras.socials.map(({ id, platform, url }) => {
                 const { icon: Icon, label, color } = SOCIAL_PLATFORMS[platform];
                 const content = (
                   <>
@@ -577,36 +458,7 @@ export default function Home() {
 
         {/* 5. 탭 콘텐츠 영역 */}
         {activeTab === "links" && (
-          <div className="space-y-4">
-            <ProfileLinkList
-              links={[...links, ...sortedSavedLinks]}
-              renderLink={(link) => {
-                const savedLink = "documentId" in link ? savedLinksById.get(link.id) : undefined;
-                if (!savedLink) return <ProfileLinkCard key={link.id} item={link} />;
-                return (
-                  <SavedLinkCard
-                    key={link.id}
-                    link={savedLink}
-                    onSave={(values) => changeSavedLink(savedLink, values)}
-                    onDelete={() => changeSavedLink(savedLink)}
-                  />
-                );
-              }}
-            />
-            {linksLoadError && <p role="alert" className="px-2 text-sm text-destructive">{linksLoadError}</p>}
-            <AddLinkDialog
-              onAdd={saveLink}
-              trigger={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-12 w-full rounded-[14px] border-tds-grey-200 bg-tds-grey-100 text-[15px] font-semibold text-tds-grey-900 hover:bg-tds-grey-200 focus-visible:ring-tds-blue-500/50"
-                >
-                  + 링크 추가
-                </Button>
-              }
-            />
-          </div>
+          <SignedInLinks key={user.uid} uid={user.uid} />
         )}
 
         {/* 탭 2: 프로젝트 (TDS Project Cards) */}
@@ -754,30 +606,45 @@ export default function Home() {
 
         {/* 푸터 정보 */}
         <footer className="mt-8 text-center text-[13px] text-tds-grey-500 space-y-1">
-          <p>© 2026 {profile.displayName}. 모든 권리를 보유해요.</p>
+          <p>© 2026 {displayName}. 모든 권리를 보유해요.</p>
           <p className="text-[11px] text-tds-grey-400">Designed with Toss Design System (TDS)</p>
         </footer>
       </main>
 
-      {/* 6. TDS 하단 고정 액션 버튼 (BottomCTA) */}
-      {coffeeLink && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 pointer-events-none">
-          {/* 보호 그라디언트 (TDS 24~32px white/grey-100 → transparent) */}
-          <div className="h-8 w-full bg-gradient-to-t from-tds-grey-100 to-transparent" />
-          <div className="bg-tds-grey-100 px-4 pb-4 pt-1 pointer-events-auto">
-            <div className="mx-auto max-w-lg">
-              <a
-                href={coffeeLink.href}
-                target={coffeeLink.isExternal ? "_blank" : undefined}
-                rel="noopener noreferrer"
-                className="tds-pressable flex h-14 w-full items-center justify-center rounded-2xl bg-tds-blue-500 hover:bg-tds-blue-600 text-[17px] font-bold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)]"
-              >
-                {coffeeLink.title}
-              </a>
-            </div>
-          </div>
-        </div>
+    </div>
+  );
+}
+
+function SignedInLinks({ uid }: { uid: string }) {
+  const { links, loading, linksLoadError } = useUserLinks(uid);
+
+  if (links.length === 0 && !linksLoadError) {
+    return loading ? (
+      <p role="status" className="px-2 py-4 text-sm text-tds-grey-600">내 링크를 불러오고 있어요.</p>
+    ) : (
+      <p className="px-2 py-4 text-sm text-tds-grey-600">아직 추가된 링크가 없어요</p>
+    );
+  }
+
+  const linksById = new Map(links.map((link) => [link.id, link]));
+
+  return (
+    <div className="space-y-4">
+      {links.length > 0 && (
+        <ProfileLinkList
+          links={links}
+          renderLink={(item) => {
+            const link = linksById.get(item.id);
+            const card = <ProfileLinkCard key={item.id} item={item} clickCount={link?.clickCount ?? 0} />;
+            return link ? (
+              <PublicLinkClick key={item.id} ownerUid={uid} linkId={link.documentId}>
+                {card}
+              </PublicLinkClick>
+            ) : card;
+          }}
+        />
       )}
+      {linksLoadError && <p role="alert" className="px-2 text-sm text-destructive">{linksLoadError}</p>}
     </div>
   );
 }

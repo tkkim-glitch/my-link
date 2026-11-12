@@ -17,9 +17,11 @@ export type LinkBlock = MainLink | { id: string; title: string; type: "header" }
 
 export function ProfileLinkList({
   links,
+  heading = "주요 바로가기",
   renderLink,
 }: {
   links: readonly LinkBlock[];
+  heading?: string;
   renderLink?: (link: MainLink) => ReactNode;
 }) {
   const headingId = useId();
@@ -27,7 +29,7 @@ export function ProfileLinkList({
   return (
     <section aria-labelledby={headingId} className="space-y-4">
       <h2 id={headingId} className="px-2 text-[13px] font-semibold text-tds-grey-600">
-        주요 바로가기
+        {heading}
       </h2>
 
       {links.length === 0 && (
@@ -49,7 +51,7 @@ export function ProfileLinkList({
   );
 }
 
-export function ProfileLinkCard({ item, children }: { item: MainLink; children?: ReactNode }) {
+export function ProfileLinkCard({ item, children, clickCount }: { item: MainLink; children?: ReactNode; clickCount?: number }) {
   const Icon = item.icon;
   return (
     <Card className="gap-0 rounded-2xl border border-tds-grey-200 bg-white py-0 ring-0 transition-colors duration-200 hover:bg-tds-grey-50">
@@ -74,6 +76,9 @@ export function ProfileLinkCard({ item, children }: { item: MainLink; children?:
                 </span>
               )}
             </div>
+            {clickCount !== undefined && (
+              <p className="mt-0.5 text-sm font-medium text-tds-grey-700 tabular-nums">{clickCount.toLocaleString("ko-KR")}회 클릭</p>
+            )}
             {item.subtitle && (
               <p className="mt-0.5 truncate text-[15px] leading-normal text-tds-grey-600">
                 {item.subtitle}

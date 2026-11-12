@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function validUsername(key) {
+      return key is string && key.matches('[a-z0-9][a-z0-9._-]{0,39}')
+        && !(key in ['mypage', 'stats', '_next', 'api', '404', 'favicon.ico', 'robots.txt', 'sitemap.xml']);
+    }
+
+    function validPublication(userId, profile) {
+      let key = profile.publicUsername;
+      let publication = getAfter(/databases/$(database)/documents/publicProfilesByUsername/$(key));
+      let claim = getAfter(/databases/$(database)/documents/usernames/$(key));
+      return validUsername(key) && key == profile.username.lower()
+        && claim.data.uid == userId && publication.data.uid == userId
+        && publication.data.username == profile.username
+        && publication.data.displayName == profile.displayName && publication.data.bio == profile.bio;
+    }
+
+    function previousPublicationReleased() {
+      let oldKey = resource.data.get('publicUsername', '');
+      return oldKey == '' || oldKey == request.resource.data.publicUsername
+        || !existsAfter(/databases/$(database)/documents/publicProfilesByUsername/$(oldKey));
+    }
+
+    function publicationMatches(key) {
+      let userId = request.resource.data.uid;
+      let owner = getAfter(/databases/$(database)/documents/users/$(userId));
+      return isOwner(userId) && validUsername(key)
+        && publicProfileFields(request.resource.data)
+        && owner.data.publicUsername == key && owner.data.username == request.resource.data.username
+        && owner.data.displayName == request.resource.data.displayName
+        && owner.data.bio == request.resource.data.bio;
+    }
+
+    function publicProfileFields(data) {
+      return data.keys().hasAll(['uid', 'username', 'displayName', 'bio'])
+        && data.keys().hasOnly(['uid', 'username', 'displayName', 'bio'])
+        && data.uid is string && data.username is string
+        && data.displayName is string && data.bio is string;
+    }
+
+    function hasPublicProfile(userId) {
+      let key = get(/databases/$(database)/documents/users/$(userId)).data.get('publicUsername', '');
+      return validUsername(key)
+        && get(/databases/$(database)/documents/publicProfilesByUsername/$(key)).data.uid == userId;
+    }
+
+    // Firestore returns the full document, including for public link queries.
+    function validLink(data) {
+      return data.keys().hasOnly(['title', 'url', 'createdAt', 'updatedAt', 'clickCount'])
+        && data.title is string && data.title.size() > 0
+        && data.url is string && data.url.matches('https?://.+');
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.uid == userId
+        && validPublication(userId, request.resource.data);
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'bio', 'publicUsername'])
+        && validPublication(userId, request.resource.data)
+        && previousPublicationReleased();
+    }
+
+    match /usernames/{username} {
+      allow get: if request.auth != null;
+      allow create: if isOwner(request.resource.data.uid)
+        && validUsername(username) && request.resource.data.keys().hasOnly(['uid'])
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.publicUsername == username;
+      allow delete: if isOwner(resource.data.uid)
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.publicUsername != username;
+    }
+
+    match /publicProfilesByUsername/{username} {
+      allow get: if resource == null || publicProfileFields(resource.data);
+      allow create: if publicationMatches(username);
+      allow update: if isOwner(resource.data.uid) && publicationMatches(username);
+      allow delete: if isOwner(resource.data.uid)
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.publicUsername != username;
+    }
+
+    match /users/{userId}/links/{linkId} {
+      allow read: if isOwner(userId) || hasPublicProfile(userId);
+      allow create: if isOwner(userId) && validLink(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && !request.resource.data.keys().hasAny(['updatedAt', 'clickCount']);
+      allow update: if isOwner(userId) && validLink(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'url', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isOwner(userId);
+    }
+  }
+}
