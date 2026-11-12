@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# MyLink build output and local Firebase credentials
+/MyLink/node_modules/
+/MyLink/.next/
+/MyLink/out/
+/MyLink/build/
+/MyLink/coverage/
+application_default_credentials.json
+*firebase-adminsdk*.json
+*service-account*.json
+serviceAccountKey.json
+gcloud-local/
+*.p12
